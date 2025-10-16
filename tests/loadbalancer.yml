@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-alpine-deployment
+  labels:
+    app: nginx-alpine
+spec:
+  replicas: 3 # Указываем 3 реплики Nginx
+  selector:
+    matchLabels:
+      app: nginx-alpine
+  template:
+    metadata:
+      labels:
+        app: nginx-alpine
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine # Используем легковесный образ nginx:alpine
+          ports:
+            - containerPort: 80 # Nginx слушает порт 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-alpine-loadbalancer
+  labels:
+    app: nginx-alpine
+    io.cilium/lb-enabled: "true"
+  annotations:
+    io.cilium/lb-ipam-ips: "10.10.61.52"
+spec:
+  type: LoadBalancer
+  selector:
+    app: nginx-alpine
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80

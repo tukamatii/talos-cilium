@@ -1,0 +1,99 @@
+---
+# cilium-gateway-config.yaml
+
+apiVersion: cilium.io/v2alpha1
+kind: CiliumGatewayClassConfig
+metadata:
+  name: cilium-gateway-class-config
+  namespace: default
+---
+# Новый GatewayClass, который ссылается на эту конфигурацию
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: cilium-with-config # Даем ему новое имя
+spec:
+  controllerName: io.cilium/gateway-controller
+  parametersRef:
+    group: cilium.io
+    kind: CiliumGatewayClassConfig
+    name: cilium-gateway-class-config
+    namespace: default # Укажите тот же namespace, где создаете конфиг
+---
+# gateway.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-http-gateway
+  namespace: default
+spec:
+  infrastructure:
+    annotations:
+      io.cilium/lb-ipam-ips: "10.10.61.51"
+    labels:
+      io.cilium/lb-enabled: "true"
+  gatewayClassName: cilium-with-config
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-alpine-deployment
+  labels:
+    app: nginx-alpine
+spec:
+  replicas: 3 # Указываем 3 реплики Nginx
+  selector:
+    matchLabels:
+      app: nginx-alpine
+  template:
+    metadata:
+      labels:
+        app: nginx-alpine
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine # Используем легковесный образ nginx:alpine
+          ports:
+            - containerPort: 80 # Nginx слушает порт 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-alpine-clusterip
+  labels:
+    app: nginx-alpine
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx-alpine
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+# httproute.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: echo-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: my-http-gateway
+  hostnames:
+    - "echo.local"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: nginx-alpine-clusterip
+          port: 80
