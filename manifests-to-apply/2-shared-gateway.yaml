@@ -84,6 +84,3 @@ spec:
             kind: Secret
             name: gateway-cert-com
             namespace: cilium-gateway
-
----
-
