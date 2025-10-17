@@ -4,8 +4,8 @@ metadata:
   name: "first-pool"
 spec:
   blocks:
-    - start: "10.10.61.51"
-      stop: "10.10.61.59"
+    - start: "{{talos_loadbalancer_start_ip}}"
+      stop: "{{talos_loadbalancer_end_ip}}"
 
 ---
 apiVersion: "cilium.io/v2alpha1"

@@ -32,34 +32,58 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: shared-gateway-corp
+  name: shared-gateway
   namespace: cilium-gateway
 spec:
   infrastructure:
     annotations:
-      io.cilium/lb-ipam-ips: "10.10.61.51"
+      lbipam.cilium.io/ips: "{{talos_shared_gateway_ip}}"
     labels:
       io.cilium/lb-enabled: "true"
   gatewayClassName: cilium-with-config
   listeners:
-    - name: http
+    - name: http-corp
       protocol: HTTP
       port: 80
       hostname: "*.okbtsp.corp"
       allowedRoutes:
         namespaces:
           from: All
-    - name: https
+    - name: https-corp
       protocol: HTTPS
       port: 443
       hostname: "*.okbtsp.corp"
       allowedRoutes:
         namespaces:
           from: All
-      # tls:
-      #   mode: Terminate
-      #   certificateRefs:
-      #     - group: ""
-      #       kind: Secret
-      #       name: my-tls-secret
-      #       namespace: cilium-gateway
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: gateway-cert-corp
+            namespace: cilium-gateway
+    - name: http-com
+      protocol: HTTP
+      port: 80
+      hostname: "*.okbtsp.com"
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https-com
+      protocol: HTTPS
+      port: 443
+      hostname: "*.okbtsp.com"
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: gateway-cert-com
+            namespace: cilium-gateway
+
+---
+

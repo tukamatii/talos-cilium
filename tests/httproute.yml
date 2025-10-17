@@ -1,0 +1,59 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-alpine-deployment
+  labels:
+    app: nginx-alpine
+spec:
+  replicas: 3 # Указываем 3 реплики Nginx
+  selector:
+    matchLabels:
+      app: nginx-alpine
+  template:
+    metadata:
+      labels:
+        app: nginx-alpine
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine # Используем легковесный образ nginx:alpine
+          ports:
+            - containerPort: 80 # Nginx слушает порт 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-alpine-clusterip
+  labels:
+    app: nginx-alpine
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx-alpine
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+# httproute.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: echo-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: shared-gateway
+      namespace: cilium-gateway
+      sectionName: https-corp
+  hostnames:
+    - "test.okbtsp.corp"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: nginx-alpine-clusterip
+          port: 80

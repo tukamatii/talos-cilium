@@ -1,0 +1,93 @@
+---
+- name: Trigger a rollout restart for cilium-operator deployment
+  kubernetes.core.k8s:
+    state: patched
+    kind: Deployment
+    name: cilium-operator
+    namespace: kube-system
+    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    definition:
+      spec:
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/restartedAt: '{{ lookup(''pipe'', ''date -u +"%Y-%m-%dT%H:%M:%SZ"'') }}'
+
+- name: Wait for cilium-gateway namespace to exist
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    name: cilium-gateway
+  register: ns
+  until: ns.resources | length > 0
+  retries: 30
+  delay: 5
+  delegate_to: localhost
+
+- name: Wait for CiliumGatewayClassConfig to be accepted
+  kubernetes.core.k8s_info:
+    api_version: cilium.io/v2alpha1
+    kind: CiliumGatewayClassConfig
+    name: cilium-gateway-class-config
+    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    namespace: cilium-gateway
+  register: cgcc
+  until: >
+    cgcc.resources | length > 0 and
+    (cgcc.resources[0].status is defined) and
+    (cgcc.resources[0].status.conditions | selectattr('type', 'equalto', 'Accepted') | selectattr('status', 'equalto', 'True') | list | length > 0)
+  retries: 30
+  delay: 5
+  delegate_to: localhost
+
+- name: Wait for GatewayClass to be accepted
+  kubernetes.core.k8s_info:
+    api_version: gateway.networking.k8s.io/v1
+    kind: GatewayClass
+    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    name: cilium-with-config
+  register: gc
+  until: >
+    gc.resources | length > 0 and
+    (gc.resources[0].status is defined) and
+    (gc.resources[0].status.conditions | selectattr('type', 'equalto', 'Accepted') | selectattr('status', 'equalto', 'True') | list | length > 0)
+  retries: 30
+  delay: 5
+  delegate_to: localhost
+
+- name: Wait for Gateway to be ready
+  kubernetes.core.k8s_info:
+    api_version: gateway.networking.k8s.io/v1
+    kind: Gateway
+    name: shared-gateway
+    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    namespace: cilium-gateway
+  register: gw
+  until: >
+    gw.resources | length > 0 and
+    (gw.resources[0].status is defined) and
+    (gw.resources[0].status.conditions | selectattr('type', 'equalto', 'Programmed') | selectattr('status', 'equalto', 'True') | list | length > 0) and
+    (gw.resources[0].status.addresses is defined) and
+    (gw.resources[0].status.addresses | length > 0)
+  retries: 60
+  delay: 10
+  delegate_to: localhost
+
+- name: Wait for TLS secrets to exist
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ item }}"
+    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    namespace: cilium-gateway
+  loop:
+    - gateway-cert-corp
+    - gateway-cert-com
+  register: secret
+  until: secret.resources | length > 0
+  retries: 20
+  delay: 5
+  loop_control:
+    label: "secret/{{ item }}"
+  delegate_to: localhost
