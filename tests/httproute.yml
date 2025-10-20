@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: nginx:alpine # Используем легковесный образ nginx:alpine
+          image: nginx:1.29.2-alpine3.22-perl
           ports:
             - containerPort: 80 # Nginx слушает порт 80
 ---

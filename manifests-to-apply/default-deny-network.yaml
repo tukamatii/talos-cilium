@@ -1,0 +1,129 @@
+# Не будет выполняться в рамках проекта, в проде, конечно, надо будет озаботиться сетевой безопасностью
+# ---
+# apiVersion: cilium.io/v2
+# kind: CiliumClusterwideNetworkPolicy
+# metadata:
+#   name: "default-deny-except-dns"
+# spec:
+#   description: "Block all the traffic (except DNS) by default"
+#   egress:
+#     - toEndpoints:
+#         - matchLabels:
+#             io.kubernetes.pod.namespace: kube-system
+#             k8s-app: kube-dns
+#       toPorts:
+#         - ports:
+#             - port: "53"
+#               protocol: UDP
+#           rules:
+#             dns:
+#               - matchPattern: "*"
+#   endpointSelector:
+#     matchExpressions:
+#       - key: io.kubernetes.pod.namespace
+#         operator: NotIn
+#         values:
+#           - kube-system
+#
+# ---
+# apiVersion: cilium.io/v2
+# kind: CiliumClusterwideNetworkPolicy
+# metadata:
+#   name: allow-ingress-egress
+# spec:
+#   description: "Allow all the egress traffic from reserved ingress identity to any endpoints in the cluster"
+#   endpointSelector:
+#     matchExpressions:
+#       - key: reserved:ingress
+#         operator: Exists
+#   egress:
+#     - toEntities:
+#         - cluster
+# ---
+#
+# apiVersion: "cilium.io/v2"
+# kind: CiliumNetworkPolicy
+# metadata:
+#   name: "kube-system-policy"
+#   namespace: "kube-system"
+# spec:
+#   # Этот селектор применяет политику ко ВСЕМ подам в пространстве имен kube-system.
+#   # Так как правил по умолчанию нет, это создает "default deny" для всего трафика.
+#   endpointSelector: {}
+#
+#   # --- ПРАВИЛА ДЛЯ ВХОДЯЩЕГО ТРАФИКА (INGRESS) ---
+#   # Разрешает трафик, поступающий В поды пространства имен kube-system.
+#   ingress:
+#     # Правило 1: Разрешить DNS запросы ко всем подам CoreDNS.
+#     - fromEndpoints:
+#         - {} # Разрешить от любого пода в кластере
+#       toPorts:
+#         - ports:
+#             - port: "53"
+#               protocol: "UDP"
+#             - port: "53"
+#               protocol: "TCP"
+#           rules:
+#             dns:
+#               - matchPattern: "*"
+#       # Применяется только к подам с меткой k8s-app=kube-dns
+#       endpointSelector:
+#         matchLabels:
+#           k8s-app: kube-dns
+#
+#     # Правило 2: Разрешить всем в кластере обращаться к API-серверу.
+#     - fromEntities:
+#         - cluster
+#       toPorts:
+#         - ports:
+#             - port: "6443" # Стандартный безопасный порт API сервера
+#               protocol: "TCP"
+#       # Применяется только к подам API-сервера
+#       endpointSelector:
+#         matchLabels:
+#           component: kube-apiserver
+#
+#     # Правило 3: Разрешить подам внутри kube-system свободно общаться друг с другом.
+#     # Это важно для взаимодействия компонентов, например, API-сервера с etcd.
+#     - fromEndpoints:
+#         - matchLabels:
+#             # Любой под из пространства имен kube-system
+#             "io.kubernetes.pod.namespace": "kube-system"
+#
+#   # --- ПРАВИЛА ДЛЯ ИСХОДЯЩЕГО ТРАФИКА (EGRESS) ---
+#   # Разрешает трафик, исходящий ИЗ подов пространства имен kube-system.
+#   egress:
+#     # Правило 1: Разрешить всем подам в kube-system делать DNS запросы.
+#     - toEndpoints:
+#         - matchLabels:
+#             "io.kubernetes.pod.namespace": "kube-system"
+#             "k8s-app": "kube-dns"
+#       toPorts:
+#         - ports:
+#             - port: "53"
+#               protocol: "UDP"
+#             - port: "53"
+#               protocol: "TCP"
+#           rules:
+#             dns:
+#               - matchPattern: "*"
+#
+#     # Правило 2: Разрешить подам внутри kube-system свободно общаться друг с другом.
+#     - toEndpoints:
+#         - matchLabels:
+#             "io.kubernetes.pod.namespace": "kube-system"
+#
+#     # Правило 3: Разрешить API-серверу подключаться к подам в любом пространстве имен.
+#     # Это необходимо для функций kubectl exec, logs и для вебхуков.
+#     - toEntities:
+#         - cluster
+#       # Применяется только к подам API-сервера
+#       endpointSelector:
+#         matchLabels:
+#           component: kube-apiserver
+#
+#     # Правило 4: Разрешить компонентам, таким как Cilium agent или kube-proxy,
+#     # взаимодействовать с хост-машиной (узлом).
+#     - toEntities:
+#         - host
+#
