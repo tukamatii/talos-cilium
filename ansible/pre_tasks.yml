@@ -1,0 +1,137 @@
+---
+- name: Add Cilium Helm repository
+  kubernetes.core.helm_repository:
+    name: cilium
+    repo_url: https://helm.cilium.io/
+  delegate_to: localhost
+
+- name: Deploy Cilium from Helm chart
+  kubernetes.core.helm:
+    name: cilium
+    chart_ref: cilium/cilium
+    chart_version: "1.18.2"
+    namespace: kube-system
+    create_namespace: true
+    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    release_values:
+      ipam:
+        mode: cluster-pool
+        operator:
+          clusterPoolIPv4PodCIDRList:
+            - "{{talos_cilium_network}}"
+          clusterPoolIPv4MaskSize: "{{talos_cilium_node_network_size}}"
+      ipv4NativeRoutingCIDR: "{{talos_cilium_network}}"
+      kubeProxyReplacement: true
+      securityContext:
+        capabilities:
+          ciliumAgent:
+            - CHOWN
+            - KILL
+            - NET_ADMIN
+            - NET_RAW
+            - IPC_LOCK
+            - SYS_ADMIN
+            - SYS_RESOURCE
+            - DAC_OVERRIDE
+            - FOWNER
+            - SETGID
+            - SETUID
+          cleanCiliumState:
+            - NET_ADMIN
+            - SYS_ADMIN
+            - SYS_RESOURCE
+      cgroup:
+        autoMount:
+          enabled: false
+        hostRoot: /sys/fs/cgroup
+      k8sServiceHost: "{{talos_interface_vip}}"
+      k8sServicePort: 6443
+      loadBalancer:
+        mode: dsr
+        acceleration: native
+      l7Proxy: true
+      opentelemetry:
+        enabled: true
+        endpoint: tempo.example.com:4317
+        insecure: true
+        exporter: grpc
+        samplingRate: 1.0
+      routingMode: native
+      autoDirectNodeRoutes: true
+      l2announcements:
+        enabled: true
+      hubble:
+        enabled: true
+        relay:
+          enabled: true
+        ui:
+          enabled: true
+      operator:
+        replicas: 3
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: node-role.kubernetes.io/control-plane
+                      operator: Exists
+      gatewayAPI:
+        enabled: true
+    state: present
+    wait: true
+    wait_timeout: 600s
+  delegate_to: localhost
+
+- name: Wait for cilium-operator Deployment to be ready (with API fallback)
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: kube-system
+    name: cilium-operator
+    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+  register: dep
+  until: >
+    dep is not failed and
+    dep.resources | length > 0 and
+    dep.resources[0].status.availableReplicas is defined and
+    dep.resources[0].status.availableReplicas >= (dep.resources[0].spec.replicas | default(1))
+  retries: 120
+  delay: 5
+  delegate_to: localhost
+  run_once: true
+  delegate_facts: true
+
+- name: Wait for Cilium DaemonSet to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: DaemonSet
+    name: cilium
+    namespace: kube-system
+    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+  register: cilium_ds
+  until: >
+    cilium_ds.resources | length > 0 and
+    cilium_ds.resources[0].status.desiredNumberScheduled is defined and
+    cilium_ds.resources[0].status.numberReady is defined and
+    cilium_ds.resources[0].status.numberReady == cilium_ds.resources[0].status.desiredNumberScheduled
+  retries: 60
+  delay: 10
+  delegate_to: localhost
+
+- name: Wait for Cilium Envoy DaemonSet to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: DaemonSet
+    name: cilium-envoy
+    namespace: kube-system
+    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+  register: envoy_ds
+  until: >
+    envoy_ds.resources | length > 0 and
+    envoy_ds.resources[0].status.desiredNumberScheduled is defined and
+    envoy_ds.resources[0].status.numberReady is defined and
+    envoy_ds.resources[0].status.numberReady == envoy_ds.resources[0].status.desiredNumberScheduled
+  retries: 60
+  delay: 10
+  delegate_to: localhost

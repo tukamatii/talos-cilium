@@ -4,6 +4,9 @@ talos_loadbalancer_end_ip: "10.10.61.59"
 
 talos_shared_gateway_ip: "10.10.61.51"
 
+talos_cilium_network: 10.224.0.0/13
+talos_cilium_node_network_size: 22
+
 talos_shared_gateway_corp_key: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   63623933383534323831633232313337373363623064323433323432656564666236383830613635
