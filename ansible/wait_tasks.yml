@@ -5,7 +5,7 @@
     kind: Deployment
     name: cilium-operator
     namespace: kube-system
-    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
     definition:
       spec:
         template:
@@ -17,7 +17,7 @@
   kubernetes.core.k8s_info:
     api_version: v1
     kind: Namespace
-    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
     name: cilium-gateway
   register: ns
   until: ns.resources | length > 0
@@ -30,7 +30,7 @@
     api_version: cilium.io/v2alpha1
     kind: CiliumGatewayClassConfig
     name: cilium-gateway-class-config
-    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
     namespace: cilium-gateway
   register: cgcc
   until: >
@@ -45,7 +45,7 @@
   kubernetes.core.k8s_info:
     api_version: gateway.networking.k8s.io/v1
     kind: GatewayClass
-    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
     name: cilium-with-config
   register: gc
   until: >
@@ -61,7 +61,7 @@
     api_version: gateway.networking.k8s.io/v1
     kind: Gateway
     name: shared-gateway
-    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
     namespace: cilium-gateway
   register: gw
   until: >
@@ -79,7 +79,7 @@
     api_version: v1
     kind: Secret
     name: "{{ item }}"
-    kubeconfig: "{{ kube_config_folder }}{{ target }}.yaml"
+    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
     namespace: cilium-gateway
   loop:
     - gateway-cert-corp

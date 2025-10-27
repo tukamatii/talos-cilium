@@ -1,5 +1,5 @@
 ---
-talos_loadbalancer_start_ip: "10.10.61.51"
+talos_loadbalancer_start_ip: "10.10.61.50"
 talos_loadbalancer_end_ip: "10.10.61.59"
 
 talos_shared_gateway_ip: "10.10.61.51"

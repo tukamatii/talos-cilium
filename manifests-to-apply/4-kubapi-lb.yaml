@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-apiserver-lb
+  namespace: kube-system
+  labels:
+    app: nginx-alpine
+    io.cilium/lb-enabled: "true"
+  annotations:
+    io.cilium/lb-ipam-ips: "10.10.61.50"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 6443
+    targetPort: 6443
+    protocol: TCP
+  selector:
+    k8s-app: kube-apiserver
