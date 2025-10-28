@@ -1,18 +1,37 @@
----
+- name: Check if Cilium DaemonSet exists
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: DaemonSet
+    name: cilium
+    namespace: kube-system
+    kubeconfig: "{{ kube_config_file }}"
+  register: cilium_ds_check
+  delegate_to: localhost
+
+- name: Check if Cilium Envoy DaemonSet exists
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: DaemonSet
+    name: cilium-envoy
+    namespace: kube-system
+    kubeconfig: "{{ kube_config_file }}"
+  register: envoy_ds_check
+  delegate_to: localhost
+
 - name: Add Cilium Helm repository
   kubernetes.core.helm_repository:
     name: cilium
     repo_url: https://helm.cilium.io/
   delegate_to: localhost
 
-- name: Deploy Cilium from Helm chart
+- name: Deploy Cilium from Helm chart (only if not already installed)
   kubernetes.core.helm:
     name: cilium
     chart_ref: cilium/cilium
     chart_version: "1.18.2"
     namespace: kube-system
     create_namespace: true
-    kubeconfig: "{{ kube_config_file_no_loadbalancer }}"
+    kubeconfig: "{{ kube_config_file }}"
     release_values:
       ipam:
         mode: cluster-pool
@@ -93,7 +112,7 @@
     kind: Deployment
     namespace: kube-system
     name: cilium-operator
-    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
+    kubeconfig: "{{kube_config_file}}"
   register: dep
   until: >
     dep is not failed and
@@ -112,7 +131,7 @@
     kind: DaemonSet
     name: cilium
     namespace: kube-system
-    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
+    kubeconfig: "{{ kube_config_file }}"
   register: cilium_ds
   until: >
     cilium_ds.resources | length > 0 and
@@ -129,7 +148,7 @@
     kind: DaemonSet
     name: cilium-envoy
     namespace: kube-system
-    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
+    kubeconfig: "{{ kube_config_file }}"
   register: envoy_ds
   until: >
     envoy_ds.resources | length > 0 and
@@ -139,3 +158,20 @@
   retries: 60
   delay: 10
   delegate_to: localhost
+
+- name: Wait for cilium-operator Deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: kube-system
+    name: cilium-operator
+    kubeconfig: "{{ kube_config_file }}"
+  register: dep
+  until: >
+    dep.resources | length > 0 and
+    dep.resources[0].status.availableReplicas is defined and
+    dep.resources[0].status.availableReplicas >= (dep.resources[0].spec.replicas | default(1))
+  retries: 120
+  delay: 5
+  delegate_to: localhost
+  run_once: true

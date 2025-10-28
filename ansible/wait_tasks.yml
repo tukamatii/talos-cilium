@@ -1,23 +1,39 @@
 ---
-- name: Trigger a rollout restart for cilium-operator deployment
+- name: Get current cilium-operator deployment
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: cilium-operator
+    namespace: kube-system
+    kubeconfig: "{{ kube_config_file }}"
+  register: current_operator
+  delegate_to: localhost
+
+- name: Trigger a one-time rollout restart for cilium-operator (if not already done)
   kubernetes.core.k8s:
     state: patched
     kind: Deployment
     name: cilium-operator
     namespace: kube-system
-    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
+    kubeconfig: "{{ kube_config_file }}"
     definition:
       spec:
         template:
           metadata:
             annotations:
-              kubectl.kubernetes.io/restartedAt: '{{ lookup(''pipe'', ''date -u +"%Y-%m-%dT%H:%M:%SZ"'') }}'
+              cilium.io/rollout-restarted: "true"
+              kubectl.kubernetes.io/restartedAt: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
+  when:
+    - current_operator.resources | length > 0
+    - (current_operator.resources[0].spec.template.metadata.annotations is not defined) or
+      (current_operator.resources[0].spec.template.metadata.annotations.get("cilium.io/rollout-restarted") != "true")
+  delegate_to: localhost
 
 - name: Wait for cilium-gateway namespace to exist
   kubernetes.core.k8s_info:
     api_version: v1
     kind: Namespace
-    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
+    kubeconfig: "{{kube_config_file}}"
     name: cilium-gateway
   register: ns
   until: ns.resources | length > 0
@@ -30,7 +46,7 @@
     api_version: cilium.io/v2alpha1
     kind: CiliumGatewayClassConfig
     name: cilium-gateway-class-config
-    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
+    kubeconfig: "{{kube_config_file}}"
     namespace: cilium-gateway
   register: cgcc
   until: >
@@ -45,7 +61,7 @@
   kubernetes.core.k8s_info:
     api_version: gateway.networking.k8s.io/v1
     kind: GatewayClass
-    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
+    kubeconfig: "{{kube_config_file}}"
     name: cilium-with-config
   register: gc
   until: >
@@ -61,7 +77,7 @@
     api_version: gateway.networking.k8s.io/v1
     kind: Gateway
     name: shared-gateway
-    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
+    kubeconfig: "{{kube_config_file}}"
     namespace: cilium-gateway
   register: gw
   until: >
@@ -79,7 +95,7 @@
     api_version: v1
     kind: Secret
     name: "{{ item }}"
-    kubeconfig: "{{kube_config_file_no_loadbalancer}}"
+    kubeconfig: "{{kube_config_file}}"
     namespace: cilium-gateway
   loop:
     - gateway-cert-corp
